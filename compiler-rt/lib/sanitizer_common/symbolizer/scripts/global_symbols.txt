@@ -36,7 +36,6 @@ __umoddi3 U
 _exit U
 abort U
 access U
-bcmp U
 calloc U
 catclose U
 catgets U
