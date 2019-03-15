@@ -213,7 +213,15 @@ void LinkerDriver::addFile(StringRef Path, bool WithLOption) {
     // understand the LLVM bitcode file. It is a pretty common error, so
     // we'll handle it as if it had a symbol table.
     if (!File->isEmpty() && !File->hasSymbolTable()) {
-      for (const auto &P : getArchiveMembers(MBRef))
+      // Check if all members are bitcode files. If not, ignore, which is the
+      // default action without the LTO hack described above.
+      for (const std::pair<MemoryBufferRef, uint64_t> &P :
+           getArchiveMembers(MBRef))
+        if (identify_magic(P.first.getBuffer()) != file_magic::bitcode)
+          return;
+
+      for (const std::pair<MemoryBufferRef, uint64_t> &P :
+           getArchiveMembers(MBRef))
         Files.push_back(make<LazyObjFile>(P.first, Path, P.second));
       return;
     }
@@ -1416,7 +1424,7 @@ static std::vector<WrappedSymbol> addWrappedSymbols(opt::InputArgList &Args) {
 // When this function is executed, only InputFiles and symbol table
 // contain pointers to symbol objects. We visit them to replace pointers,
 // so that wrapped symbols are swapped as instructed by the command line.
-template <class ELFT> static void wrapSymbols(ArrayRef<WrappedSymbol> Wrapped) {
+static void wrapSymbols(ArrayRef<WrappedSymbol> Wrapped) {
   DenseMap<Symbol *, Symbol *> Map;
   for (const WrappedSymbol &W : Wrapped) {
     Map[W.Sym] = W.Wrap;
@@ -1592,7 +1600,7 @@ template <class ELFT> void LinkerDriver::link(opt::InputArgList &Args) {
 
   // Apply symbol renames for -wrap.
   if (!Wrapped.empty())
-    wrapSymbols<ELFT>(Wrapped);
+    wrapSymbols(Wrapped);
 
   // Now that we have a complete list of input files.
   // Beyond this point, no new files are added.
